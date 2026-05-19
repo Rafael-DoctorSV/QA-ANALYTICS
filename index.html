@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Analytics Dashboard</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Navigation -->
+        <aside class="sidebar glass-panel">
+            <div class="logo-area">
+                <div class="logo-icon"><i class="ri-hospital-line"></i></div>
+                <h2>DoctorSV QA Analytics</h2>
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <li class="active"><a href="#"><i class="ri-bar-chart-box-line"></i> Resumen de Calidad</a></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <p>Antigravity © 2026</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-titles">
+                    <h1>Resultados de Auditoría QA</h1>
+                    <p>Análisis integral de desempeño y métricas operativas</p>
+                </div>
+                <div class="header-actions">
+                    <button id="btn-restart" class="btn-secondary" style="display: none;" onclick="location.reload()">
+                        <i class="ri-refresh-line"></i> Cargar Nuevos Archivos
+                    </button>
+                </div>
+            </header>
+
+            <!-- Upload Placeholder (Visible initially) -->
+            <div id="upload-placeholder" class="upload-placeholder glass-panel">
+                <h3>Sube tus archivos de reporte</h3>
+                <p>Sube los reportes en formato Excel (.xlsx, .xls, .csv). Haz clic en las áreas correspondientes o arrastra los archivos.</p>
+                
+                <div class="upload-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <div class="upload-area" id="drop-zone-tel" onclick="document.getElementById('file-upload-tel').click()" style="border: 2px dashed rgba(255,255,255,0.2); border-radius: 12px; padding: 30px; cursor: pointer; transition: all 0.3s ease;">
+                        <i class="ri-phone-line" style="font-size: 2rem; color: var(--accent-blue);"></i>
+                        <h4>Reporte Telefónico</h4>
+                        <p class="file-name-label" id="file-name-tel" style="font-size: 0.9rem; opacity: 0.7; margin-top: 10px;">Ningún archivo seleccionado</p>
+                        <input type="file" id="file-upload-tel" accept=".xlsx, .xls, .csv" style="display: none;">
+                    </div>
+                    
+                    <div class="upload-area" id="drop-zone-dig" onclick="document.getElementById('file-upload-dig').click()" style="border: 2px dashed rgba(255,255,255,0.2); border-radius: 12px; padding: 30px; cursor: pointer; transition: all 0.3s ease;">
+                        <i class="ri-macbook-line" style="font-size: 2rem; color: var(--accent-purple);"></i>
+                        <h4>Reporte Digital</h4>
+                        <p class="file-name-label" id="file-name-dig" style="font-size: 0.9rem; opacity: 0.7; margin-top: 10px;">Ningún archivo seleccionado</p>
+                        <input type="file" id="file-upload-dig" accept=".xlsx, .xls, .csv" style="display: none;">
+                    </div>
+                </div>
+                
+                <button id="btn-process-files" class="btn-primary" style="margin-top: 25px; display: none; margin-left: auto; margin-right: auto;">
+                    <i class="ri-dashboard-3-line"></i> Generar Dashboard
+                </button>
+            </div>
+
+            <!-- Dashboard Content (Hidden initially) -->
+            <div id="dashboard-content" class="dashboard-content" style="display: none;">
+                
+                <!-- Filters Section -->
+                <section class="filters-section glass-panel">
+                    <div class="filter-group">
+                        <label for="date-from"><i class="ri-calendar-line"></i> Desde</label>
+                        <input type="date" id="date-from">
+                    </div>
+                    <div class="filter-group">
+                        <label for="date-to"><i class="ri-calendar-event-line"></i> Hasta</label>
+                        <input type="date" id="date-to">
+                    </div>
+                    <div class="filter-group">
+                        <label for="canal-select"><i class="ri-headphone-line"></i> Canal de Atención</label>
+                        <select id="canal-select">
+                            <option value="all">Todos los canales</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="tipo-select"><i class="ri-error-warning-line"></i> Tipo de Incumplimiento</label>
+                        <select id="tipo-select">
+                            <option value="all">Todos los tipos</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="agente-select"><i class="ri-user-line"></i> Agente</label>
+                        <select id="agente-select">
+                            <option value="all">Todos los agentes</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="supervisor-select"><i class="ri-user-star-line"></i> Supervisor</label>
+                        <select id="supervisor-select">
+                            <option value="all">Todos los supervisores</option>
+                        </select>
+                    </div>
+                    <div class="filter-actions" style="display: none;">
+                        <button id="btn-apply-filters" class="btn-secondary">Aplicar Filtros</button>
+                    </div>
+                </section>
+
+                <!-- KPIs Section -->
+                <section class="kpi-section">
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon total"><i class="ri-alert-line"></i></div>
+                        <div class="kpi-info">
+                            <h4 id="kpi-total-incumplimientos">0</h4>
+                            <span>Total Incumplimientos</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon agents"><i class="ri-team-line"></i></div>
+                        <div class="kpi-info">
+                            <h4 id="kpi-total-agentes">0</h4>
+                            <span>Agentes Evaluados</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon total" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;"><i class="ri-close-circle-line"></i></div>
+                        <div class="kpi-info">
+                            <h4 id="kpi-auto-fail">0</h4>
+                            <span>Auto Fails</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon agents" style="background: rgba(16, 185, 129, 0.15); color: #10b981;"><i class="ri-file-list-3-line"></i></div>
+                        <div class="kpi-info">
+                            <h4 id="kpi-total-evaluaciones">0</h4>
+                            <span>Total Evaluaciones</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass-panel kpi-top3-card">
+                        <div class="kpi-icon top-type" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;"><i class="ri-list-check"></i></div>
+                        <div class="kpi-info">
+                            <span class="top3-title">Top 3 Comportamientos</span>
+                            <ul id="kpi-top3-normal-list" class="top3-list">
+                                <li>-</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div style="flex-basis: 100%; height: 0; margin: 0;"></div>
+
+                    <div class="kpi-card glass-panel kpi-top3-card">
+                        <div class="kpi-icon top-type" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;"><i class="ri-close-circle-line"></i></div>
+                        <div class="kpi-info">
+                            <span class="top3-title">Top 3 Auto Fails</span>
+                            <ul id="kpi-top3-autofail-list" class="top3-list">
+                                <li>-</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass-panel kpi-top3-card">
+                        <div class="kpi-icon top-type" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;"><i class="ri-alert-fill"></i></div>
+                        <div class="kpi-info">
+                            <span class="top3-title">Top 3 Auto Zeros</span>
+                            <ul id="kpi-top3-autozero-list" class="top3-list">
+                                <li>-</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Chart Section -->
+                <section class="chart-section glass-panel">
+                    <div class="chart-header">
+                        <h3>Incumplimientos por Supervisor</h3>
+                        <div class="chart-legend-custom"></div>
+                    </div>
+                    <div class="canvas-scroll-wrapper" style="overflow-x: auto; overflow-y: hidden; width: 100%;">
+                        <div class="canvas-container" id="chart-container" style="height: 500px; position: relative; min-width: 100%;">
+                            <canvas id="mainChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

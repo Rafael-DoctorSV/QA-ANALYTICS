@@ -1,0 +1,627 @@
+// Global State
+let rawData = [];
+let processedData = [];
+let allEvaluations = []; // Nuevo array para guardar TODAS las evaluaciones (filas)
+let chartInstance = null;
+
+// DOM Elements - Upload
+const fileInputTel = document.getElementById('file-upload-tel');
+const fileInputDig = document.getElementById('file-upload-dig');
+const dropZoneTel = document.getElementById('drop-zone-tel');
+const dropZoneDig = document.getElementById('drop-zone-dig');
+const fileNameTel = document.getElementById('file-name-tel');
+const fileNameDig = document.getElementById('file-name-dig');
+const btnProcessFiles = document.getElementById('btn-process-files');
+const uploadPlaceholder = document.getElementById('upload-placeholder');
+const dashboardContent = document.getElementById('dashboard-content');
+const btnApplyFilters = document.getElementById('btn-apply-filters');
+const dateFromInput = document.getElementById('date-from');
+const dateToInput = document.getElementById('date-to');
+const canalSelect = document.getElementById('canal-select');
+const tipoSelect = document.getElementById('tipo-select');
+const supervisorSelect = document.getElementById('supervisor-select');
+const agenteSelect = document.getElementById('agente-select');
+
+// KPI Elements
+const kpiTotal = document.getElementById('kpi-total-incumplimientos');
+const kpiAgentes = document.getElementById('kpi-total-agentes');
+
+let fileTel = null;
+let fileDig = null;
+
+// Helper to setup drag and drop
+function setupDragAndDrop(dropZone, fileInput, fileVarName, fileNameElement) {
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = 'rgba(255,255,255,0.05)';
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.style.backgroundColor = '';
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = '';
+        if (e.dataTransfer.files.length > 0) {
+            handleFileSelection(e.dataTransfer.files[0], fileVarName, fileNameElement);
+        }
+    });
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelection(e.target.files[0], fileVarName, fileNameElement);
+        }
+    });
+}
+
+function handleFileSelection(file, fileVarName, fileNameElement) {
+    if (fileVarName === 'tel') fileTel = file;
+    if (fileVarName === 'dig') fileDig = file;
+    fileNameElement.textContent = file.name;
+    fileNameElement.style.opacity = '1';
+    fileNameElement.style.color = '#fff';
+    
+    if (fileTel || fileDig) {
+        btnProcessFiles.style.display = 'flex';
+    }
+}
+
+setupDragAndDrop(dropZoneTel, fileInputTel, 'tel', fileNameTel);
+setupDragAndDrop(dropZoneDig, fileInputDig, 'dig', fileNameDig);
+
+btnProcessFiles.addEventListener('click', async () => {
+    rawData = []; // Reset
+    allEvaluations = []; // Reset
+    
+    const readExcel = (file) => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: "" });
+                resolve(jsonData);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    };
+
+    btnProcessFiles.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Procesando...';
+    btnProcessFiles.disabled = true;
+
+    try {
+        if (fileTel) {
+            const dataTel = await readExcel(fileTel);
+            processRawData(dataTel, "Telefónico");
+        }
+        if (fileDig) {
+            const dataDig = await readExcel(fileDig);
+            processRawData(dataDig, "Digital");
+        }
+
+        if (rawData.length === 0) {
+            alert("No se encontraron incumplimientos o los archivos estaban vacíos.");
+        } else {
+            uploadPlaceholder.style.display = 'none';
+            dashboardContent.style.display = 'block';
+            applyFilters();
+        }
+    } catch (err) {
+        alert("Ocurrió un error al procesar los archivos: " + err);
+    } finally {
+        btnProcessFiles.innerHTML = '<i class="ri-dashboard-3-line"></i> Generar Dashboard';
+        btnProcessFiles.disabled = false;
+    }
+});
+
+// Filtros automáticos: Se aplican en cuanto se cambia cualquier valor
+[dateFromInput, dateToInput, canalSelect, tipoSelect, supervisorSelect, agenteSelect].forEach(input => {
+    if(input) {
+        input.addEventListener('change', () => {
+            if (typeof applyFilters === 'function') applyFilters();
+        });
+    }
+});
+
+// Colors for Chart
+const chartColors = [
+    '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4',
+    '#6366f1', '#14b8a6', '#f43f5e', '#84cc16', '#eab308', '#d946ef', '#0ea5e9'
+];
+
+function processRawData(data, canalName) {
+    if (data.length === 0) return;
+    
+    const keys = Object.keys(data[0]);
+    
+    // Find Date and Agent column dynamically
+    let colFecha = keys[0]; // Usuario dijo "Puedes ocupar la fecha de la primera columna"
+    let colAgente = keys.find(k => k.toLowerCase().includes("agente"));
+    let colSupervisor = keys.find(k => k.toLowerCase().includes("supervisor"));
+    
+    // Encontrar rangos exactos por nombre de columna
+    const findBoundaries = (startStr, endStr) => {
+        const start = keys.findIndex(k => k.toLowerCase().includes(startStr.toLowerCase()));
+        const end = keys.findIndex(k => k.toLowerCase().includes(endStr.toLowerCase()));
+        if (start !== -1 && end !== -1) {
+            return { min: Math.min(start, end), max: Math.max(start, end) };
+        }
+        return { min: -1, max: -1 };
+    };
+
+    let autoZeroStartStr = '';
+    let autoZeroEndStr = '';
+    let autoFailStartStr = '';
+    let autoFailEndStr = '';
+
+    if (canalName === 'Telefónico') {
+        autoZeroStartStr = 'expresión verbal deficiente y tono inadecuado';
+        autoZeroEndStr = 'no respeta el tiempo prudencial para finalizar la llamada tras el cierre';
+        autoFailStartStr = 'habla negativamente del servicio';
+        autoFailEndStr = 'agente corta la llamada';
+    } else { // Digital
+        autoZeroStartStr = 'redacción incomprensible o incoherente';
+        autoZeroEndStr = 'no respeta el tiempo prudencial para cerrar la interacción por inactividad';
+        autoFailStartStr = 'habla negativamente del servicio';
+        autoFailEndStr = 'no transfiere contacto al destino correcto';
+    }
+
+    const autoZeroRange = findBoundaries(autoZeroStartStr, autoZeroEndStr);
+    const autoFailRange = findBoundaries(autoFailStartStr, autoFailEndStr);
+    
+    // Identify criteria columns by excluding known info columns
+    const excludeKeywords = ['fecha', 'id', 'agente', 'supervisor', 'analista', 'puntaje', 'conclusión', 'conclusion'];
+    const criteriaColumns = keys.filter(key => {
+        const lowerKey = key.toLowerCase();
+        return !excludeKeywords.some(kw => lowerKey.includes(kw));
+    });
+
+    data.forEach(row => {
+        const agenteRaw = row[colAgente];
+        if (!agenteRaw) return; // Skip empty rows
+        
+        const agente = String(agenteRaw).trim();
+        const supervisorRaw = colSupervisor ? row[colSupervisor] : null;
+        const supervisor = supervisorRaw ? String(supervisorRaw).trim() : "Desconocido";
+        let rawDate = row[colFecha];
+        let dateObj = null;
+
+        // Parse Date
+        if (rawDate) {
+            if (rawDate instanceof Date) {
+                dateObj = new Date(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate());
+            } else if (typeof rawDate === 'string') {
+                const parts = rawDate.split(/[-/]/);
+                if (parts.length >= 3) {
+                    // Assuming DD/MM/YYYY
+                    dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+                    if (isNaN(dateObj.getTime())) {
+                        dateObj = new Date(rawDate); // Fallback
+                    }
+                } else {
+                    dateObj = new Date(rawDate);
+                }
+            }
+        }
+        
+        // Count Auto Fails for this specific evaluation based on strict column indices
+        let autoFailsCount = 0;
+        
+        // Check for each criteria if there is a failure
+        let processedTiposForRow = new Set();
+        
+        criteriaColumns.forEach(criteria => {
+            const colIndex = keys.indexOf(criteria);
+            const val = String(row[criteria] || "").trim().toUpperCase();
+            
+            if (val === "NO" || val === "INCUMPLE") {
+                let tipoLimpio = criteria.replace(/_\d+$/, '').trim();
+                
+                // Omite columnas duplicadas en la misma fila (ej: Uso de lenguaje)
+                if (processedTiposForRow.has(tipoLimpio)) return;
+                processedTiposForRow.add(tipoLimpio);
+                let clase = 'Normal'; // Comportamientos por defecto
+
+                // Excepciones explícitas obligatorias
+                const isLenguaje = tipoLimpio.toLowerCase().includes('uso de lenguaje profesional y adecuado');
+                const isTMO = tipoLimpio.toLowerCase().includes('tiempo medio de operación');
+
+                if (isLenguaje || isTMO) {
+                    clase = 'Normal'; // Siempre son comportamientos
+                } else if (val === "NO") {
+                    clase = 'Normal'; // Comportamientos son todos los que digan "NO"
+                } else if (val === "INCUMPLE") {
+                    // Validar rangos
+                    const isAutoZero = autoZeroRange.min !== -1 && colIndex >= autoZeroRange.min && colIndex <= autoZeroRange.max;
+                    const isAutoFail = autoFailRange.min !== -1 && colIndex >= autoFailRange.min && colIndex <= autoFailRange.max;
+                    
+                    if (isAutoZero) {
+                        clase = 'Auto Zero';
+                    } else if (isAutoFail) {
+                        clase = 'Auto Fail';
+                    }
+                }
+
+                if (clase === 'Auto Fail') {
+                    autoFailsCount++;
+                }
+                
+                rawData.push({
+                    fechaStr: rawDate,
+                    fechaObj: dateObj,
+                    agente: agente,
+                    supervisor: supervisor,
+                    canal: canalName,
+                    tipo: tipoLimpio,
+                    clase: clase
+                });
+            }
+        });
+        
+        // Guardar la evaluación completa para los KPIs de "Total" y "Agentes Evaluados"
+        allEvaluations.push({
+            fechaObj: dateObj,
+            agente: agente,
+            supervisor: supervisor,
+            canal: canalName,
+            autoFails: autoFailsCount
+        });
+    });
+}
+
+function getFilteredData(excludeFilterName = null) {
+    const fromDateStr = dateFromInput.value;
+    const toDateStr = dateToInput.value;
+    const selectedCanal = canalSelect.value;
+    const selectedTipo = tipoSelect.value;
+    const selectedSupervisor = supervisorSelect.value;
+    const selectedAgente = agenteSelect.value;
+
+    let fromDate = null;
+    if (fromDateStr) {
+        const parts = fromDateStr.split('-'); // El input de fecha devuelve YYYY-MM-DD
+        fromDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+
+    let toDate = null;
+    if (toDateStr) {
+        const parts = toDateStr.split('-');
+        toDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        toDate.setHours(23, 59, 59, 999);
+    }
+
+    return rawData.filter(item => {
+        let matchDate = true;
+        if (item.fechaObj && !isNaN(item.fechaObj.getTime())) {
+            if (fromDate && item.fechaObj < fromDate) matchDate = false;
+            if (toDate && item.fechaObj > toDate) matchDate = false;
+        }
+
+        let matchCanal = true;
+        if (excludeFilterName !== 'canal' && selectedCanal !== 'all' && item.canal !== selectedCanal) {
+            matchCanal = false;
+        }
+
+        let matchTipo = true;
+        if (excludeFilterName !== 'tipo' && selectedTipo !== 'all' && item.tipo !== selectedTipo) {
+            matchTipo = false;
+        }
+        
+        let matchSupervisor = true;
+        if (excludeFilterName !== 'supervisor' && selectedSupervisor !== 'all' && item.supervisor !== selectedSupervisor) {
+            matchSupervisor = false;
+        }
+
+        let matchAgente = true;
+        if (excludeFilterName !== 'agente' && selectedAgente !== 'all' && item.agente !== selectedAgente) {
+            matchAgente = false;
+        }
+
+        return matchDate && matchCanal && matchTipo && matchSupervisor && matchAgente;
+    });
+}
+
+function getFilteredEvaluations(excludeFilterName = null) {
+    const fromDateStr = dateFromInput.value;
+    const toDateStr = dateToInput.value;
+    const selectedCanal = canalSelect.value;
+    const selectedSupervisor = supervisorSelect.value;
+    const selectedAgente = agenteSelect.value;
+
+    let fromDate = null;
+    if (fromDateStr) {
+        const parts = fromDateStr.split('-');
+        fromDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+
+    let toDate = null;
+    if (toDateStr) {
+        const parts = toDateStr.split('-');
+        toDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        toDate.setHours(23, 59, 59, 999);
+    }
+
+    return allEvaluations.filter(item => {
+        let matchDate = true;
+        if (item.fechaObj && !isNaN(item.fechaObj.getTime())) {
+            if (fromDate && item.fechaObj < fromDate) matchDate = false;
+            if (toDate && item.fechaObj > toDate) matchDate = false;
+        }
+
+        let matchCanal = true;
+        if (excludeFilterName !== 'canal' && selectedCanal !== 'all' && item.canal !== selectedCanal) {
+            matchCanal = false;
+        }
+        
+        let matchSupervisor = true;
+        if (excludeFilterName !== 'supervisor' && selectedSupervisor !== 'all' && item.supervisor !== selectedSupervisor) {
+            matchSupervisor = false;
+        }
+
+        let matchAgente = true;
+        if (excludeFilterName !== 'agente' && selectedAgente !== 'all' && item.agente !== selectedAgente) {
+            matchAgente = false;
+        }
+
+        return matchDate && matchCanal && matchSupervisor && matchAgente;
+    });
+}
+
+function updateSelectFilter(selectElement, dataSet, defaultText) {
+    const currentValue = selectElement.value;
+    selectElement.innerHTML = `<option value="all">${defaultText}</option>`;
+    
+    Array.from(dataSet).sort().forEach(item => {
+        const option = document.createElement('option');
+        option.value = item;
+        option.textContent = item;
+        selectElement.appendChild(option);
+    });
+
+    if (currentValue !== 'all' && !dataSet.has(currentValue)) {
+        selectElement.value = 'all';
+        return true; // El valor seleccionado ya no es válido bajo los nuevos filtros
+    } else {
+        selectElement.value = currentValue;
+        return false;
+    }
+}
+
+function updateDynamicFilters() {
+    let changed = false;
+
+    const dataForCanal = getFilteredData('canal');
+    const canalesSet = new Set(dataForCanal.map(item => item.canal));
+    if (updateSelectFilter(canalSelect, canalesSet, "Todos los canales")) changed = true;
+
+    const dataForTipo = getFilteredData('tipo');
+    const tiposSet = new Set(dataForTipo.map(item => item.tipo));
+    if (updateSelectFilter(tipoSelect, tiposSet, "Todos los tipos")) changed = true;
+    
+    const dataForSupervisor = getFilteredData('supervisor');
+    const supervisoresSet = new Set(dataForSupervisor.map(item => item.supervisor));
+    if (updateSelectFilter(supervisorSelect, supervisoresSet, "Todos los supervisores")) changed = true;
+
+    const dataForAgente = getFilteredData('agente');
+    const agentesSet = new Set(dataForAgente.map(item => item.agente));
+    if (updateSelectFilter(agenteSelect, agentesSet, "Todos los agentes")) changed = true;
+
+    return changed;
+}
+
+function applyFilters() {
+    processedData = getFilteredData();
+    
+    // Actualizamos las opciones de los dropdowns en base a lo filtrado
+    // Si un filtro tenía seleccionado un valor que dejó de existir, se resetea a "Todos" y se re-calcula.
+    if (updateDynamicFilters()) {
+        processedData = getFilteredData();
+    }
+    
+    updateDashboard();
+}
+
+function updateDashboard() {
+    updateKPIs();
+    updateChart();
+}
+
+function updateKPIs() {
+    kpiTotal.textContent = processedData.length;
+
+    // Utilizamos filteredEvals para que los KPIs reflejen el total de evaluaciones y agentes independientes de los incumplimientos
+    const filteredEvals = getFilteredEvaluations();
+    
+    const agentesSet = new Set(filteredEvals.map(item => item.agente));
+    kpiAgentes.textContent = agentesSet.size;
+    
+    const totalAutoFails = filteredEvals.reduce((sum, item) => sum + item.autoFails, 0);
+    document.getElementById('kpi-auto-fail').textContent = totalAutoFails;
+    
+    document.getElementById('kpi-total-evaluaciones').textContent = filteredEvals.length;
+
+    const renderTop3 = (listId, dataSubset) => {
+        const counts = {};
+        dataSubset.forEach(item => {
+            counts[item.tipo] = (counts[item.tipo] || 0) + 1;
+        });
+
+        const listEl = document.getElementById(listId);
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        
+        listEl.innerHTML = '';
+        if (sorted.length === 0) {
+            listEl.innerHTML = '<li>-</li>';
+            return;
+        }
+
+        const colors = ['#8b5cf6', '#ec4899', '#f59e0b'];
+        sorted.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.style.borderLeftColor = colors[index] || colors[0];
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'top3-name';
+            nameSpan.textContent = item[0];
+            nameSpan.title = item[0];
+            
+            const countSpan = document.createElement('span');
+            countSpan.className = 'count';
+            countSpan.textContent = item[1];
+            
+            li.appendChild(nameSpan);
+            li.appendChild(countSpan);
+            listEl.appendChild(li);
+        });
+    };
+
+    renderTop3('kpi-top3-normal-list', processedData.filter(item => item.clase === 'Normal'));
+    renderTop3('kpi-top3-autofail-list', processedData.filter(item => item.clase === 'Auto Fail'));
+    renderTop3('kpi-top3-autozero-list', processedData.filter(item => item.clase === 'Auto Zero'));
+}
+
+const stackedTotalPlugin = {
+    id: 'stackedTotal',
+    afterDatasetsDraw: (chart, args, options) => {
+        const { ctx } = chart;
+        chart.data.labels.forEach((label, i) => {
+            let total = 0;
+            let topY = chart.scales.y.bottom;
+            let xPos = null;
+            
+            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                if (!chart.isDatasetVisible(datasetIndex)) return;
+                const value = dataset.data[i];
+                if (value > 0) {
+                    total += value;
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    const element = meta.data[i];
+                    if (element && element.y < topY) {
+                        topY = element.y;
+                        xPos = element.x;
+                    }
+                }
+            });
+            
+            if (total > 0 && xPos !== null) {
+                ctx.save();
+                ctx.fillStyle = '#f8fafc'; // Color del texto
+                ctx.font = 'bold 11px "Outfit", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(total, xPos, topY - 4); // Dibujar el número 4px por encima de la barra
+                ctx.restore();
+            }
+        });
+    }
+};
+
+function updateChart() {
+    const isSupervisorSelected = supervisorSelect.value !== 'all';
+    const groupKey = isSupervisorSelected ? 'agente' : 'supervisor';
+    const chartTitle = isSupervisorSelected ? 'Incumplimientos por Agente' : 'Incumplimientos por Supervisor';
+    
+    // Actualizar el título de la gráfica dinámicamente
+    const chartHeaderObj = document.querySelector('.chart-header h3');
+    if(chartHeaderObj) chartHeaderObj.textContent = chartTitle;
+
+    const groupMap = {}; // e.g. { 'Juan': { 'Tipo 1': 5, 'Tipo 2': 2 } }
+    const allTipos = new Set();
+
+    processedData.forEach(item => {
+        const groupName = item[groupKey] || 'Desconocido';
+        if (!groupMap[groupName]) groupMap[groupName] = {};
+        groupMap[groupName][item.tipo] = (groupMap[groupName][item.tipo] || 0) + 1;
+        allTipos.add(item.tipo);
+    });
+
+    const labels = Object.keys(groupMap).sort();
+    const tiposArray = Array.from(allTipos).sort();
+
+    const datasets = tiposArray.map((tipo, index) => {
+        const data = labels.map(g => groupMap[g][tipo] || 0);
+        return {
+            label: tipo,
+            data: data,
+            backgroundColor: chartColors[index % chartColors.length],
+            borderWidth: 0,
+            borderRadius: 4
+        };
+    });
+
+    // Ajustar el ancho para que ocupe todo el espacio sin scroll horizontal
+    const chartContainer = document.getElementById('chart-container');
+    chartContainer.style.width = '100%';
+
+    const ctx = document.getElementById('mainChart').getContext('2d');
+    
+    // Set default Chart.js colors for dark theme
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+    Chart.defaults.font.family = "'Outfit', sans-serif";
+
+    if (chartInstance) {
+        // En lugar de destruir y recrear, actualizamos los datos y forzamos el renderizado
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets = datasets;
+        chartInstance.update();
+        return;
+    }
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 25 } // Espacio extra para que no se corten los números
+            },
+            animation: {
+                duration: 400 // Animación más rápida para los filtros
+            },
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#e2e8f0',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1,
+                    padding: 12,
+                    boxPadding: 6
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
+                    }
+                }
+            }
+        },
+        plugins: [stackedTotalPlugin]
+    });
+}
