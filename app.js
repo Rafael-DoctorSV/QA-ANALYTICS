@@ -4,17 +4,9 @@ let processedData = [];
 let allEvaluations = []; // Nuevo array para guardar TODAS las evaluaciones (filas)
 let chartInstance = null;
 
-// DOM Elements - Upload
-const fileInputTel = document.getElementById('file-upload-tel');
-const fileInputDig = document.getElementById('file-upload-dig');
-const dropZoneTel = document.getElementById('drop-zone-tel');
-const dropZoneDig = document.getElementById('drop-zone-dig');
-const fileNameTel = document.getElementById('file-name-tel');
-const fileNameDig = document.getElementById('file-name-dig');
-const btnProcessFiles = document.getElementById('btn-process-files');
-const uploadPlaceholder = document.getElementById('upload-placeholder');
+// DOM Elements
+const loadingContainer = document.getElementById('loading-container');
 const dashboardContent = document.getElementById('dashboard-content');
-const btnApplyFilters = document.getElementById('btn-apply-filters');
 const dateFromInput = document.getElementById('date-from');
 const dateToInput = document.getElementById('date-to');
 const canalSelect = document.getElementById('canal-select');
@@ -26,91 +18,39 @@ const agenteSelect = document.getElementById('agente-select');
 const kpiTotal = document.getElementById('kpi-total-incumplimientos');
 const kpiAgentes = document.getElementById('kpi-total-agentes');
 
-let fileTel = null;
-let fileDig = null;
-
-// Helper to setup drag and drop
-function setupDragAndDrop(dropZone, fileInput, fileVarName, fileNameElement) {
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = 'rgba(255,255,255,0.05)';
-    });
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.style.backgroundColor = '';
-    });
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '';
-        if (e.dataTransfer.files.length > 0) {
-            handleFileSelection(e.dataTransfer.files[0], fileVarName, fileNameElement);
-        }
-    });
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFileSelection(e.target.files[0], fileVarName, fileNameElement);
-        }
-    });
-}
-
-function handleFileSelection(file, fileVarName, fileNameElement) {
-    if (fileVarName === 'tel') fileTel = file;
-    if (fileVarName === 'dig') fileDig = file;
-    fileNameElement.textContent = file.name;
-    fileNameElement.style.opacity = '1';
-    fileNameElement.style.color = '#fff';
+document.addEventListener('DOMContentLoaded', async () => {
+    rawData = []; 
+    allEvaluations = []; 
     
-    if (fileTel || fileDig) {
-        btnProcessFiles.style.display = 'flex';
-    }
-}
-
-setupDragAndDrop(dropZoneTel, fileInputTel, 'tel', fileNameTel);
-setupDragAndDrop(dropZoneDig, fileInputDig, 'dig', fileNameDig);
-
-btnProcessFiles.addEventListener('click', async () => {
-    rawData = []; // Reset
-    allEvaluations = []; // Reset
-    
-    const readExcel = (file) => {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: "" });
-                resolve(jsonData);
-            };
-            reader.readAsArrayBuffer(file);
-        });
+    const readExcelFromUrl = async (url) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) return null;
+            const arrayBuffer = await response.arrayBuffer();
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            return XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: "" });
+        } catch (e) {
+            console.warn(`Could not load ${url}`, e);
+            return null;
+        }
     };
 
-    btnProcessFiles.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Procesando...';
-    btnProcessFiles.disabled = true;
+    // Descargar archivos automáticamente
+    const dataTel = await readExcelFromUrl('./datos_telefonico.xlsx');
+    if (dataTel) processRawData(dataTel, "Telefónico");
+    
+    const dataDig = await readExcelFromUrl('./datos_digital.xlsx');
+    if (dataDig) processRawData(dataDig, "Digital");
 
-    try {
-        if (fileTel) {
-            const dataTel = await readExcel(fileTel);
-            processRawData(dataTel, "Telefónico");
-        }
-        if (fileDig) {
-            const dataDig = await readExcel(fileDig);
-            processRawData(dataDig, "Digital");
-        }
-
-        if (rawData.length === 0) {
-            alert("No se encontraron incumplimientos o los archivos estaban vacíos.");
-        } else {
-            uploadPlaceholder.style.display = 'none';
-            dashboardContent.style.display = 'block';
-            applyFilters();
-        }
-    } catch (err) {
-        alert("Ocurrió un error al procesar los archivos: " + err);
-    } finally {
-        btnProcessFiles.innerHTML = '<i class="ri-dashboard-3-line"></i> Generar Dashboard';
-        btnProcessFiles.disabled = false;
+    if (rawData.length === 0) {
+        if(loadingContainer) loadingContainer.innerHTML = '<div style="text-align:center; padding: 50px;"><h3>No se encontraron los datos</h3><p>Asegúrate de que los archivos "datos_telefonico.xlsx" y "datos_digital.xlsx" existan en la misma ruta.</p></div>';
+    } else {
+        if(loadingContainer) loadingContainer.style.display = 'none';
+        dashboardContent.style.display = 'block';
+        applyFilters();
     }
 });
 
