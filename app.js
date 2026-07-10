@@ -95,12 +95,12 @@ function processRawData(data, canalName) {
     let autoFailEndStr = '';
 
     if (canalName === 'Telefónico') {
-        autoZeroStartStr = 'expresión verbal deficiente y tono inadecuado';
+        autoZeroStartStr = 'no demuestra escucha activa';
         autoZeroEndStr = 'no respeta el tiempo prudencial para finalizar la llamada tras el cierre';
         autoFailStartStr = 'habla negativamente del servicio';
         autoFailEndStr = 'agente corta la llamada';
     } else { // Digital
-        autoZeroStartStr = 'redacción incomprensible o incoherente';
+        autoZeroStartStr = 'lectura comprensiva y verificaci';
         autoZeroEndStr = 'no respeta el tiempo prudencial para cerrar la interacción por inactividad';
         autoFailStartStr = 'habla negativamente del servicio';
         autoFailEndStr = 'no transfiere contacto al destino correcto';
@@ -163,7 +163,7 @@ function processRawData(data, canalName) {
                 let clase = 'Normal'; // Comportamientos por defecto
 
                 // Excepciones explícitas obligatorias
-                const isLenguaje = tipoLimpio.toLowerCase().includes('uso de lenguaje profesional y adecuado');
+                const isLenguaje = tipoLimpio.toLowerCase().includes('uso de lenguaje') || tipoLimpio.toLowerCase().includes('uso de vocabulario');
                 const isTMO = tipoLimpio.toLowerCase().includes('tiempo medio de operación');
 
                 if (isLenguaje || isTMO) {
