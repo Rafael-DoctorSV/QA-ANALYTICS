@@ -211,6 +211,15 @@
                             <option value="all">Todos los agentes</option>
                         </select>
                     </div>
+                    <div class="filter-actions" style="margin-top: 10px; display: flex; gap: 15px; align-items: center; justify-content: flex-end; flex: 1;">
+                        <div class="agentes-kpi-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 10px 15px; border-radius: 8px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                            <i class="ri-file-list-3-line"></i>
+                            Total: <span id="agentes-total-evaluaciones">0</span>
+                        </div>
+                        <button id="btn-download-agentes" class="btn-primary" style="white-space: nowrap;">
+                            <i class="ri-file-excel-2-line"></i> Descargar Excel
+                        </button>
+                    </div>
                 </section>
 
                 <section class="table-section glass-panel" style="margin-top: 20px; padding: 20px;">

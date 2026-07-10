@@ -578,6 +578,8 @@ const agCanalSelect = document.getElementById('agentes-canal-select');
 const agSupervisorSelect = document.getElementById('agentes-supervisor-select');
 const agAgenteSelect = document.getElementById('agentes-agente-select');
 const agTbody = document.getElementById('agentes-tbody');
+const agTotalSpan = document.getElementById('agentes-total-evaluaciones');
+const agDownloadBtn = document.getElementById('btn-download-agentes');
 
 window.switchTab = function(tabId) {
     if (tabId === 'dashboard') {
@@ -660,6 +662,10 @@ function renderAgentesTable() {
     if (!agTbody) return;
     agTbody.innerHTML = '';
     
+    // Calcular total dinámico
+    const totalEvaluaciones = resultados.reduce((sum, item) => sum + item.conteo, 0);
+    if(agTotalSpan) agTotalSpan.textContent = totalEvaluaciones;
+    
     if (resultados.length === 0) {
         agTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No se encontraron resultados</td></tr>';
         return;
@@ -703,3 +709,44 @@ function populateAgentesSelects() {
         input.addEventListener('change', renderAgentesTable);
     }
 });
+
+if(agDownloadBtn) {
+    agDownloadBtn.addEventListener('click', () => {
+        const data = getFilteredAgentes();
+        const agrupado = {};
+        data.forEach(item => {
+            const key = `${item.agente}|${item.canal}|${item.supervisor}`;
+            if (!agrupado[key]) {
+                agrupado[key] = {
+                    "Agente": item.agente,
+                    "Canal de Atención": item.canal,
+                    "Supervisor Asignado": item.supervisor,
+                    "Evaluaciones Realizadas": 0
+                };
+            }
+            agrupado[key]["Evaluaciones Realizadas"]++;
+        });
+        
+        const resultadosExcel = Object.values(agrupado).sort((a, b) => b["Evaluaciones Realizadas"] - a["Evaluaciones Realizadas"]);
+        
+        if(resultadosExcel.length === 0) {
+            alert('No hay datos para exportar con los filtros actuales.');
+            return;
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(resultadosExcel);
+        
+        // Ajustar el ancho de las columnas
+        const wscols = [
+            {wch: 35}, // Agente
+            {wch: 20}, // Canal
+            {wch: 35}, // Supervisor
+            {wch: 25}  // Evaluaciones
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Resumen Agentes");
+        XLSX.writeFile(workbook, "Resumen_Agentes.xlsx");
+    });
+}
