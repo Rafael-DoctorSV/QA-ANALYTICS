@@ -565,3 +565,141 @@ function updateChart() {
         plugins: [stackedTotalPlugin]
     });
 }
+
+// --- NUEVA PESTAÑA DETALLES DE AGENTES ---
+const navDashboard = document.getElementById('nav-dashboard');
+const navAgentes = document.getElementById('nav-agentes');
+const dashboardContentSection = document.getElementById('dashboard-content');
+const agentesContentSection = document.getElementById('agentes-content');
+
+const agDateFromInput = document.getElementById('agentes-date-from');
+const agDateToInput = document.getElementById('agentes-date-to');
+const agCanalSelect = document.getElementById('agentes-canal-select');
+const agSupervisorSelect = document.getElementById('agentes-supervisor-select');
+const agAgenteSelect = document.getElementById('agentes-agente-select');
+const agTbody = document.getElementById('agentes-tbody');
+
+window.switchTab = function(tabId) {
+    if (tabId === 'dashboard') {
+        navDashboard.classList.add('active');
+        navAgentes.classList.remove('active');
+        dashboardContentSection.style.display = 'block';
+        agentesContentSection.style.display = 'none';
+        applyFilters(); 
+    } else {
+        navDashboard.classList.remove('active');
+        navAgentes.classList.add('active');
+        dashboardContentSection.style.display = 'none';
+        agentesContentSection.style.display = 'block';
+        populateAgentesSelects();
+        renderAgentesTable();
+    }
+};
+
+function getFilteredAgentes() {
+    const fromDateStr = agDateFromInput.value;
+    const toDateStr = agDateToInput.value;
+    const selectedCanal = agCanalSelect.value;
+    const selectedSupervisor = agSupervisorSelect.value;
+    const selectedAgente = agAgenteSelect.value;
+
+    let fromDate = null;
+    if (fromDateStr) {
+        const parts = fromDateStr.split('-');
+        fromDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+
+    let toDate = null;
+    if (toDateStr) {
+        const parts = toDateStr.split('-');
+        toDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        toDate.setHours(23, 59, 59, 999);
+    }
+
+    return allEvaluations.filter(item => {
+        let matchDate = true;
+        if (item.fechaObj && !isNaN(item.fechaObj.getTime())) {
+            if (fromDate && item.fechaObj < fromDate) matchDate = false;
+            if (toDate && item.fechaObj > toDate) matchDate = false;
+        }
+
+        let matchCanal = true;
+        if (selectedCanal !== 'all' && item.canal !== selectedCanal) matchCanal = false;
+        
+        let matchSupervisor = true;
+        if (selectedSupervisor !== 'all' && item.supervisor !== selectedSupervisor) matchSupervisor = false;
+
+        let matchAgente = true;
+        if (selectedAgente !== 'all' && item.agente !== selectedAgente) matchAgente = false;
+
+        return matchDate && matchCanal && matchSupervisor && matchAgente;
+    });
+}
+
+function renderAgentesTable() {
+    const data = getFilteredAgentes();
+    
+    // Agrupar por Agente + Canal + Supervisor
+    const agrupado = {};
+    data.forEach(item => {
+        const key = `${item.agente}|${item.canal}|${item.supervisor}`;
+        if (!agrupado[key]) {
+            agrupado[key] = {
+                agente: item.agente,
+                canal: item.canal,
+                supervisor: item.supervisor,
+                conteo: 0
+            };
+        }
+        agrupado[key].conteo++;
+    });
+
+    // Convertir a array y ordenar por cantidad descendente
+    const resultados = Object.values(agrupado).sort((a, b) => b.conteo - a.conteo);
+
+    if (!agTbody) return;
+    agTbody.innerHTML = '';
+    
+    if (resultados.length === 0) {
+        agTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No se encontraron resultados</td></tr>';
+        return;
+    }
+
+    resultados.forEach(res => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${res.agente}</td>
+            <td><span class="canal-badge" style="background: ${res.canal === 'Telefónico' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)'}; color: ${res.canal === 'Telefónico' ? 'var(--accent-blue)' : 'var(--accent-purple)'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">${res.canal}</span></td>
+            <td>${res.supervisor}</td>
+            <td>${res.conteo}</td>
+        `;
+        agTbody.appendChild(tr);
+    });
+}
+
+let agentesSelectsPopulated = false;
+function populateAgentesSelects() {
+    if (agentesSelectsPopulated) return;
+    
+    const uniqueCanales = new Set();
+    const uniqueSupervisores = new Set();
+    const uniqueAgentes = new Set();
+
+    allEvaluations.forEach(item => {
+        uniqueCanales.add(item.canal);
+        if (item.supervisor) uniqueSupervisores.add(item.supervisor);
+        if (item.agente) uniqueAgentes.add(item.agente);
+    });
+
+    if(agCanalSelect) updateSelectFilter(agCanalSelect, uniqueCanales, "Todos los canales");
+    if(agSupervisorSelect) updateSelectFilter(agSupervisorSelect, uniqueSupervisores, "Todos los supervisores");
+    if(agAgenteSelect) updateSelectFilter(agAgenteSelect, uniqueAgentes, "Todos los agentes");
+    
+    agentesSelectsPopulated = true;
+}
+
+[agDateFromInput, agDateToInput, agCanalSelect, agSupervisorSelect, agAgenteSelect].forEach(input => {
+    if(input) {
+        input.addEventListener('change', renderAgentesTable);
+    }
+});

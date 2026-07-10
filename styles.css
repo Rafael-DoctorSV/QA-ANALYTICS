@@ -443,4 +443,54 @@ body {
     .kpi-section { flex-direction: column; }
     .filters-section { flex-direction: column; align-items: stretch; }
     .filter-actions { margin-left: 0; margin-top: 10px; }
+    .chart-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
+
+/* Responsive Tables */
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.agents-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    color: var(--text-primary);
+}
+
+.agents-table th, .agents-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.agents-table th {
+    background-color: rgba(255, 255, 255, 0.05);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+.agents-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.agents-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.agents-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.agents-table td {
+    font-size: 0.95rem;
+}
+
+.agents-table td:last-child {
+    font-weight: 600;
+    color: var(--accent-blue);
 }

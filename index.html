@@ -25,8 +25,8 @@
             </div>
             <nav>
                 <ul class="nav-links">
-                    <li class="active"><a href="#"><i class="ri-bar-chart-box-line"></i> Resumen de Calidad</a></li>
-                </ul>
+                    <li id="nav-dashboard" class="active"><a href="#" onclick="switchTab('dashboard')"><i class="ri-bar-chart-box-line"></i> Resumen de Calidad</a></li>
+                    <li id="nav-agentes"><a href="#" onclick="switchTab('agentes')"><i class="ri-team-line"></i> Detalle de Agentes</a></li>
             </nav>
             <div class="sidebar-footer">
                 <p>Antigravity © 2026</p>
@@ -179,9 +179,64 @@
                     </div>
                 </section>
             </div>
+
+            <!-- Agentes Content (Hidden initially) -->
+            <div id="agentes-content" class="dashboard-content" style="display: none;">
+                <!-- Filters Section for Agentes -->
+                <section class="filters-section glass-panel">
+                    <div class="filter-group">
+                        <label for="agentes-date-from"><i class="ri-calendar-line"></i> Desde</label>
+                        <input type="date" id="agentes-date-from">
+                    </div>
+                    <div class="filter-group">
+                        <label for="agentes-date-to"><i class="ri-calendar-event-line"></i> Hasta</label>
+                        <input type="date" id="agentes-date-to">
+                    </div>
+                    <div class="filter-group">
+                        <label for="agentes-canal-select"><i class="ri-headphone-line"></i> Canal de Atención</label>
+                        <select id="agentes-canal-select">
+                            <option value="all">Todos los canales</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="agentes-supervisor-select"><i class="ri-user-star-line"></i> Supervisor</label>
+                        <select id="agentes-supervisor-select">
+                            <option value="all">Todos los supervisores</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="agentes-agente-select"><i class="ri-user-line"></i> Agente</label>
+                        <select id="agentes-agente-select">
+                            <option value="all">Todos los agentes</option>
+                        </select>
+                    </div>
+                </section>
+
+                <section class="table-section glass-panel" style="margin-top: 20px; padding: 20px;">
+                    <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ri-table-line"></i> Resumen de Evaluaciones por Agente
+                    </h3>
+                    <div class="table-responsive">
+                        <table class="agents-table">
+                            <thead>
+                                <tr>
+                                    <th>Agente</th>
+                                    <th>Canal de Atención</th>
+                                    <th>Supervisor Asignado</th>
+                                    <th>Evaluaciones Realizadas</th>
+                                </tr>
+                            </thead>
+                            <tbody id="agentes-tbody">
+                                <!-- Data injected by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
         </main>
     </div>
-
+    
     <script src="app.js"></script>
 </body>
 </html>
