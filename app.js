@@ -669,7 +669,7 @@ function renderAgentesTable() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${res.agente}</td>
-            <td><span class="canal-badge" style="background: ${res.canal === 'Telefónico' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)'}; color: ${res.canal === 'Telefónico' ? 'var(--accent-blue)' : 'var(--accent-purple)'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">${res.canal}</span></td>
+            <td><span class="canal-badge" style="background: ${res.canal.includes('Telef') ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)'}; color: ${res.canal.includes('Telef') ? 'var(--accent-blue)' : 'var(--accent-purple)'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">${res.canal}</span></td>
             <td>${res.supervisor}</td>
             <td>${res.conteo}</td>
         `;
