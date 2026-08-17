@@ -132,14 +132,25 @@ function processRawData(data, canalName) {
             } else if (typeof rawDate === 'number') {
                 dateObj = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
             } else if (typeof rawDate === 'string') {
-                const parts = rawDate.split(/[-/]/);
+                const dateOnly = rawDate.trim().split(/[ T]/)[0]; // Tomar solo la fecha, ignorar la hora
+                const parts = dateOnly.split(/[-/]/);
                 if (parts.length >= 3) {
-                    if (parts[0].length === 4) {
-                        dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-                    } else {
-                        // Assuming DD/MM/YYYY
-                        dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+                    let year, month, day;
+                    if (parts[0].length === 4) { // YYYY-MM-DD
+                        year = parseInt(parts[0], 10);
+                        month = parseInt(parts[1], 10) - 1;
+                        day = parseInt(parts[2], 10);
+                    } else { // DD/MM/YYYY o MM/DD/YYYY
+                        year = parseInt(parts[2], 10);
+                        month = parseInt(parts[1], 10) - 1;
+                        day = parseInt(parts[0], 10);
+                        // Ajuste por si el mes es > 12 (formato US)
+                        if (month > 11) {
+                            day = parseInt(parts[1], 10);
+                            month = parseInt(parts[0], 10) - 1;
+                        }
                     }
+                    dateObj = new Date(year, month, day);
                     if (isNaN(dateObj.getTime())) {
                         dateObj = new Date(rawDate); // Fallback
                     }
