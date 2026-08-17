@@ -72,12 +72,11 @@ const chartColors = [
 function processRawData(data, canalName) {
     if (data.length === 0) return;
     
-    const keys = Object.keys(data[0]);
-    
-    // Find Date and Agent column dynamically
-    let colFecha = keys[0]; // Usuario dijo "Puedes ocupar la fecha de la primera columna"
-    let colAgente = keys.find(k => k.toLowerCase().includes("agente"));
-    let colSupervisor = keys.find(k => k.toLowerCase().includes("supervisor"));
+    const keys = Object.keys(data[0] || {});
+    // Flexible column finding
+    let colFecha = keys.find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('date') || k.toLowerCase().includes('día') || k.toLowerCase().includes('dia')) || keys[0];
+    let colAgente = keys.find(k => k.toLowerCase().includes('agente') || k.toLowerCase().includes('evaluador'));
+    let colSupervisor = keys.find(k => k.toLowerCase().includes('supervisor'));
     
     // Encontrar rangos exactos por nombre de columna
     const findBoundaries = (startStr, endStr) => {
@@ -110,7 +109,7 @@ function processRawData(data, canalName) {
     const autoFailRange = findBoundaries(autoFailStartStr, autoFailEndStr);
     
     // Identify criteria columns by excluding known info columns
-    const excludeKeywords = ['fecha', 'id', 'agente', 'supervisor', 'analista', 'puntaje', 'conclusión', 'conclusion'];
+    const excludeKeywords = ['fecha', 'date', 'día', 'dia', 'id', 'agente', 'supervisor', 'analista', 'puntaje', 'conclusión', 'conclusion'];
     const criteriaColumns = keys.filter(key => {
         const lowerKey = key.toLowerCase();
         return !excludeKeywords.some(kw => lowerKey.includes(kw));
@@ -130,11 +129,17 @@ function processRawData(data, canalName) {
         if (rawDate) {
             if (rawDate instanceof Date) {
                 dateObj = new Date(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate());
+            } else if (typeof rawDate === 'number') {
+                dateObj = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
             } else if (typeof rawDate === 'string') {
                 const parts = rawDate.split(/[-/]/);
                 if (parts.length >= 3) {
-                    // Assuming DD/MM/YYYY
-                    dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+                    if (parts[0].length === 4) {
+                        dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+                    } else {
+                        // Assuming DD/MM/YYYY
+                        dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+                    }
                     if (isNaN(dateObj.getTime())) {
                         dateObj = new Date(rawDate); // Fallback
                     }
@@ -350,15 +355,18 @@ function updateDynamicFilters() {
 }
 
 function applyFilters() {
-    processedData = getFilteredData();
-    
-    // Actualizamos las opciones de los dropdowns en base a lo filtrado
-    // Si un filtro tenía seleccionado un valor que dejó de existir, se resetea a "Todos" y se re-calcula.
-    if (updateDynamicFilters()) {
+    try {
         processedData = getFilteredData();
+        
+        // Actualizamos las opciones de los dropdowns en base a lo filtrado
+        if (updateDynamicFilters()) {
+            processedData = getFilteredData();
+        }
+        
+        updateDashboard();
+    } catch(e) {
+        console.error('Error applying filters', e);
     }
-    
-    updateDashboard();
 }
 
 function updateDashboard() {
