@@ -3,6 +3,7 @@ let rawData = [];
 let processedData = [];
 let allEvaluations = []; // Nuevo array para guardar TODAS las evaluaciones (filas)
 let chartInstance = null;
+let agentesChartInstance = null; // Instancia del gráfico de agentes
 
 // DOM Elements
 const loadingContainer = document.getElementById('loading-container');
@@ -708,6 +709,60 @@ function renderAgentesTable() {
             <td>${res.conteo}</td>
         `;
         agTbody.appendChild(tr);
+    });
+
+    updateAgentesSupervisorChart(data);
+}
+
+function updateAgentesSupervisorChart(data) {
+    const ctx = document.getElementById('agentes-supervisor-chart');
+    if (!ctx) return;
+
+    // Agrupar evaluaciones por supervisor (sin desagregar por agente/canal)
+    const agrupado = {};
+    data.forEach(item => {
+        const key = item.supervisor || 'Desconocido';
+        agrupado[key] = (agrupado[key] || 0) + 1;
+    });
+
+    // Ordenar por cantidad descendente
+    const sorted = Object.entries(agrupado).sort((a, b) => b[1] - a[1]);
+    const labels = sorted.map(item => item[0]);
+    const values = sorted.map(item => item[1]);
+
+    if (agentesChartInstance) {
+        agentesChartInstance.data.labels = labels;
+        agentesChartInstance.data.datasets[0].data = values;
+        agentesChartInstance.update();
+        return;
+    }
+
+    agentesChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Evaluaciones',
+                data: values,
+                backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            }
+        }
     });
 }
 
