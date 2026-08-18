@@ -737,6 +737,29 @@ function updateAgentesSupervisorChart(data) {
         return;
     }
 
+    const barTotalPlugin = {
+        id: 'barTotal',
+        afterDatasetsDraw: (chart, args, options) => {
+            const { ctx } = chart;
+            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                if (!chart.isDatasetVisible(datasetIndex)) return;
+                const meta = chart.getDatasetMeta(datasetIndex);
+                meta.data.forEach((element, i) => {
+                    const value = dataset.data[i];
+                    if (value > 0) {
+                        ctx.save();
+                        ctx.fillStyle = '#f8fafc'; // Color del texto
+                        ctx.font = 'bold 11px "Outfit", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(value, element.x, element.y - 4);
+                        ctx.restore();
+                    }
+                });
+            });
+        }
+    };
+
     agentesChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -750,6 +773,7 @@ function updateAgentesSupervisorChart(data) {
                 borderRadius: 4
             }]
         },
+        plugins: [barTotalPlugin],
         options: {
             responsive: true,
             maintainAspectRatio: false,
